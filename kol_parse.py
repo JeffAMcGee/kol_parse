@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+from __future__ import print_function, division, unicode_literals
 '''
 Parse a KoLMafia log of one or more encounters and produce a report of
 things like stat gains, meat drop, and item drop rates.
@@ -21,15 +23,20 @@ import sys
 import os
 import time
 import re
-import html.parser
+import io
+
+try:
+    import html.parser as html_parser
+except ImportError:
+    import HTMLParser as html_parser
 
 #Classes
 
-class toolbox:
+class toolbox(object):
 	errors = []
 	logpath = "kol_parse.txt"
 	logfile = None
-	html_parser = html.parser.HTMLParser()
+	html_parser = html_parser.HTMLParser()
 	statnums = {
 			0 : "Muscle",
 			1 : "Mysticality",
@@ -91,7 +98,7 @@ class toolbox:
 	</script>\n</head>\n<body>\n'''
 	html_foot = "</body></html>"
 
-class searches:
+class searches(object):
 	a = "\\A"
 	z = "\\Z"
 	re_charclass  = re.compile( a+"Class: ([ A-DMPSTZa-fhil-or-v]+)"+z )
@@ -121,7 +128,9 @@ class searches:
 		self.outside_combat = False
 		self.search(line)
 	def search(self, line):
-		line = str(line)
+		# I'm not sure why this next statement is here, line is already a
+		# unicode object in 2.x and a str in 3.x.
+		#line = str(line)
 		self.charclass = searches.re_charclass.search( line )
 		self.statbase = searches.re_statbase.search( line )
 		self.statday = searches.re_statday.search( line )
@@ -166,7 +175,7 @@ class searches:
 				self.statpoint ):
 			self.meta = True
 
-class encounter:
+class encounter(object):
 	def __init__(self):
 		self.num = 0
 		self.location = ""
@@ -229,7 +238,7 @@ class encounter:
 			st += "\nGained stats %s" % self.stats
 		return st
 
-class monster:
+class monster(object):
 	def __init__(self, name):
 		self.name = str(name)
 		self.encountered = 0
@@ -385,7 +394,7 @@ class monster:
 			self.name, self.encountered, self.defeated ) + st
 		return st
 
-class item:
+class item(object):
 	def __init__(self, name=""):
 		self.name = name
 		self.found = 0
@@ -414,7 +423,7 @@ class item:
 		st += ")"
 		return st
 
-class metadata_class:
+class metadata_class(object):
 	def __init__(self):
 		self.charclass = None
 		self.mainstatnum = None
@@ -539,7 +548,10 @@ class metadata_class:
 
 #Functions
 
-def log( *args, tag="br" ):
+def log( *args, **kwargs ):
+    # The signature for this method was log(*args,tag="br"), but Python 2.7 does
+    # not support named arguments after a *args, so I read tag from kwargs.
+	tag = kwargs.get('tag','br')
 	if tag and tag != "br":
 		toolbox.logfile.write( "<%s>" % tag )
 	if args:
@@ -852,13 +864,13 @@ def main():
 	fn_end = fn_dot if fn_dot > fn_start else len( paths[0] )
 	fn = paths[0][fn_start:fn_end]
 	toolbox.logpath = paths[0][:fn_start] + "kol_parse_" + fn + ".html"
-	toolbox.logfile = open( toolbox.logpath, "w", encoding="utf-8" )
+	toolbox.logfile = io.open( toolbox.logpath, "w", encoding="utf-8" )
 	toolbox.logfile.write( toolbox.html_head )
 	log( "kol_parse.py |", time.ctime(), tag="h3" )
 	encounters = []
 	for path in paths:
 		print( "\n*** Parsing file: %s\n" % path )
-		f = open(path, encoding="utf-8")
+		f = io.open(path, encoding="utf-8")
 		encounters.extend( parselines( f.read().split('\n') ) )
 		f.close()
 	numcombats = len( [True for enc in encounters if enc.iscombat] )
@@ -905,6 +917,10 @@ Other than moon sign and stat days, percentile bonuses to stat gains (like April
 		for error in toolbox.errors:
 			logprint( error )
 	toolbox.logfile.close()
-	os.startfile( toolbox.logpath )
+	try:
+		os.startfile( toolbox.logpath )
+	except AttributeError:
+		# os.startfile only exists on Windows
+		pass
 
 main()
